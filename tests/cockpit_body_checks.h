@@ -230,6 +230,19 @@ void CockpitBodyChecks(Check check) {
     const auto separateMesh=gt2::BuildCarMesh(separate,options);
     check(!gt2view::cockpit_detail::WindowOverlay(std::span(separateMesh).subspan(6,6),std::span(separateMesh).first(6)),
           "an alpha-trim panel away from the glass is not a windshield overlay");
+    gt2::CarModel orderModel;
+    orderModel.lods.resize(1);
+    orderModel.lods[0].scale = 16;
+    orderModel.lods[0].vertices.assign(4, {-2048, 3072, 0, 0});
+    for (uint8_t palette = 3; palette < 5; palette++) {
+        gt2::CarPolygon p; p.primCode = 0x28; p.vertex = {0, 1, 2, 3}; p.palette = palette;
+        orderModel.lods[0].polygons.push_back(p);
+    }
+    gt2::CarMeshOptions reversedOptions = options; reversedOptions.reverseDrawOrder = true;
+    const auto inOrder = gt2::BuildCarMesh(orderModel, options), reversedOrder = gt2::BuildCarMesh(orderModel, reversedOptions);
+    check(inOrder.size() == 12 && reversedOrder.size() == 12 && reversedOrder[0].palette == inOrder[6].palette &&
+          inOrder[0].palette != inOrder[6].palette,
+          "reverse draw order draws the body's first polygon last (a lamp over its housing)");
 }
 
 inline bool CockpitForwardBlocked(const gt2view::CockpitBody& body, const gt2::CarTexture& texture,
