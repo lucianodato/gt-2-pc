@@ -46,6 +46,7 @@ int main(int argc, char** argv) {
             if (!out) throw std::runtime_error("cannot extract " + e.path);
             ++count;
         }
+        { std::ofstream source(target / "source.sha1"); source << profile.exeSha1 << "\n"; source.flush(); }
         std::cout << "Extracted " << count << " assets for " << mode << "; original media retained for XA/audio/video.\n";
         return 0;
     } catch (const std::exception& e) { std::cerr << "gt2install: " << e.what() << '\n'; return 1; }

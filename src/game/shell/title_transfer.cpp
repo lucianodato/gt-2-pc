@@ -153,7 +153,6 @@ constexpr uint32_t kTradeLine = 0x801B9D08u, kMixLine = 0x801B9D2Cu, kConvertLin
 constexpr uint32_t kBarTemplates[6] = {0x8004C718u, 0x8004C748u, 0x8004C778u, 0x8004C7A8u, 0x8004C7D8u, 0x8004C808u};
 constexpr uint32_t kViewColours[3] = {0xD68C9Au, 0x90B4D6u, 0x7878D6u}; // views 0x8004C59C / 0x8004C644 / 0x8004C698
 constexpr uint32_t kViewTitles[3] = {0x801B9CE0u, 0x801B9CEAu, 0x801B9CFBu};
-constexpr const char* kGameFile = "BASCUS-94455GAME";
 } // namespace
 
 TransferManager::TransferManager(const TitleAssets& assets, Mode mode, std::array<CardSlot, 2> slots)
@@ -278,7 +277,7 @@ int TransferManager::Step() {
         case 1: return -1;
         case 0:
             if (mode_ == kConvert) return CardFindFile(card, kGt1SaveFileName) >= 0 ? 10 : 5;
-            return CardFindFile(card, kGameFile) >= 0 ? 6 : 5;
+            return CardFindFile(card, CurrentSaveNames().game) >= 0 ? 6 : 5;
         case 2: return 4;
         case 4: error_ = kReadFailed; return 1;
         default: return 5;

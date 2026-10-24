@@ -4,6 +4,7 @@
 #include <exception>
 
 #include "game/shell/title_draw.h"
+#include "gt2formats/save_data.h"
 
 namespace gt2::shell {
 namespace {
@@ -17,7 +18,7 @@ constexpr uint32_t kTotal = 0x7F00 + 0x80; // the file's sectors in bytes (0x7EA
 
 TitleBootLoad::TitleBootLoad(const TitleAssets& assets, const CardSlot& slot1) : assets_(assets), slot_(slot1) {
     std::vector<uint8_t> image;
-    if (CardStatus(slot_, &image) == 0 && CardFindFile(image, "BASCUS-94455GAME") >= 0) {
+    if (CardStatus(slot_, &image) == 0 && CardFindFile(image, CurrentSaveNames().game) >= 0) {
         state_ = 3;
         remaining_ = int(kTotal);
         segments_.fill(-1);

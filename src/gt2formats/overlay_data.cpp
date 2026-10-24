@@ -2,10 +2,13 @@
 
 #include <cstdio>
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
 #include <span>
 #include <stdexcept>
 
 #include "gt2formats/exe_profile.h"
+#include "gt2formats/save_data.h"
 #include "gt2formats/sha1.h"
 #include "gt2vfs/inflate.h"
 
@@ -132,6 +135,18 @@ GuestImage LoadExeImage(const DiscImage &disc) {
     image.profile = FindProfile(image.fileSha1);
     image.unknownBuild = image.profile == nullptr;
     image.module = -1;
+    SetSaveNames(LoadSaveNames(image));
+    // A data directory extracted from a different executable would mask every disc change through assets/.
+    static bool sourceWarned = false;
+    if (!sourceWarned && !disc.DataDirectory().empty()) {
+        std::ifstream source(std::filesystem::path(disc.DataDirectory()) / "source.sha1");
+        std::string expected;
+        if (source && std::getline(source, expected) && !expected.empty() && expected != image.fileSha1) {
+            std::fprintf(stderr, "warning: data directory was extracted from %s, but the disc is %s; re-import the disc or delete %s/assets\n",
+                         expected.c_str(), image.fileSha1.c_str(), disc.DataDirectory().c_str());
+            sourceWarned = true;
+        }
+    }
     return image;
 }
 

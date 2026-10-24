@@ -3,9 +3,29 @@
 #include <cstring>
 #include <stdexcept>
 
+#include "gt2formats/overlay_data.h"
+
 namespace gt2 {
 
 namespace {
+
+SaveNames g_saveNames;
+
+std::string ExeString(const GuestImage& exe, uint32_t address) {
+    uint32_t at = address;
+    try {
+        if (!exe.unknownBuild && exe.profile) at = exe.Sim(address);
+        std::string s;
+        for (size_t i = 0; i < 24; i++) {
+            const char c = char(exe.Get<uint8_t>(at + uint32_t(i)));
+            if (c == 0) break;
+            s.push_back(c);
+        }
+        return s;
+    } catch (const std::exception&) {
+        return {};
+    }
+}
 
 uint32_t U32(std::span<const uint8_t> b, size_t o) {
     if (o + 4 > b.size()) throw std::out_of_range("save data: read past the end");
@@ -17,6 +37,31 @@ uint16_t U16(std::span<const uint8_t> b, size_t o) {
 }
 
 } // namespace
+
+SaveNames LoadSaveNames(const GuestImage& exe) {
+    SaveNames n;
+    const std::string game = ExeString(exe, 0x80091C94u);
+    const std::string replay = ExeString(exe, 0x80091AB8u);
+    const std::string arcade = ExeString(exe, 0x8009198Cu);
+    if (!game.empty()) n.game = game;
+    if (!replay.empty()) n.replay = replay;
+    if (!arcade.empty()) n.arcade = arcade;
+    return n;
+}
+
+const SaveNames& CurrentSaveNames() { return g_saveNames; }
+void SetSaveNames(SaveNames names) {
+    if (names.game.empty()) names.game = "BASCUS-94455GAME";
+    if (names.replay.empty()) names.replay = "BASCUS-94455REPLAY";
+    if (names.arcade.empty()) names.arcade = names.game;
+    g_saveNames = std::move(names);
+}
+
+bool SaveFileNameMatches(const std::string& name, const std::string& wanted) {
+    if (name == wanted) return true;
+    return (wanted == "BASCUS-94455GAME" && name.rfind(wanted, 0) == 0) ||
+           (wanted == "BASCUS-94455REPLAY" && name.rfind(wanted, 0) == 0);
+}
 
 std::vector<MemoryCardFile> ReadMemoryCardFiles(std::span<const uint8_t> image) {
     constexpr size_t kFrame = 128, kBlock = 8192, kBlocks = 15;

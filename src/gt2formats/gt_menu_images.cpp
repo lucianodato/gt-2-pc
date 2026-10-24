@@ -1,4 +1,5 @@
 #include "gt2formats/gt_menu_images.h"
+#include "gt2formats/exe_profile.h"
 #include "gt2formats/title_assets.h"
 
 #include <algorithm>
@@ -741,7 +742,7 @@ MenuFrame BuildMenuFrame(const MenuAssets& assets, const MenuPage& page, const M
             if (it.Has(kEventPower) && info) {
                 std::string s = assets.String(0x801C30E2u); // "free"
                 if (info->powerLimit > 0) {
-                    std::snprintf(buf, sizeof buf, assets.String(0x801C30DCu).c_str(), (info->powerLimit * 1000) / 0x3F6); // "~%dhp"
+                    std::snprintf(buf, sizeof buf, assets.String(0x801C30DCu).c_str(), DisplayPower(assets.ovl4, info->powerLimit)); // "~%dhp"
                     s = buf;
                 }
                 text.Left(Widen(s), true, second, it.x0, it.y1, kTextColour);

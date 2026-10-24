@@ -227,6 +227,17 @@ int32_t RacingBodyCount(const TuneSheet& s) { // 0x8005F858
     return n;
 }
 
+bool HasTurboKit(const TuneSheet& s, bool gt2Plus) {
+    if (gt2Plus) {
+        for (int stage = 0; stage < 5; stage++)
+            if (int32_t(s.turboKitRow[stage]) > 0) return true;
+        return false;
+    }
+    for (int stage = 1; stage < 5; stage++)
+        if (int32_t(s.turboKitRow[stage]) >= 0) return true;
+    return false;
+}
+
 uint32_t FirstRacingBody(const TuneSheet& s, int16_t& racingBody) { // 0x800174F4
     racingBody = 1;
     return s.racingModify[1].modelId;

@@ -49,6 +49,11 @@ struct ExeProfile {
     //   type 2 (ground.cpp); the Arcade build (0x8004269C) returns after the levels.
     bool wheelEffectsTail = true;
     bool arcade = false;       // the disc's flow is the arcade one (title "ARCADE MODE DISC", arcade menus, usa_arcade_data)
+    // The disc is Gran Turismo 2 plus (pez2k), whose in-place patches do not move any address. Its data (carparam,
+    // menus, overlays) is read from the disc like retail; only the reimplemented code paths need the flags below.
+    bool gt2Plus = false;
+    // GT2+ Complete applies the metric-horsepower patch (raw PS values, no x 1000 / 0x3F6 display conversion).
+    bool gt2PlusMetricHorsepower = false;
 
     // The build's address of the Simulation address `simAddress` in `scope`; nullopt when no fact / run covers it.
     std::optional<uint32_t> TryData(uint32_t simAddress, int scope) const;
@@ -75,6 +80,10 @@ const ExeProfile* FindProfile(std::string_view exeSha1);
 const ExeProfile& ProfileOf(const GuestImage& exe);
 // The profile of a disc (its executable's SHA-1); throws for an unknown build.
 const ExeProfile& ProfileOf(const DiscImage& disc);
+
+// GT2+ Complete removes the PS -> BHP display conversion; these helpers keep every power display in one place.
+bool UsesMetricHorsepower(const GuestImage& exe);
+int32_t DisplayPower(const GuestImage& exe, int32_t ps);
 
 // The process-wide profile of the disc being played / verified (tools that read guest RAM by Simulation address:
 // gt2verify, gt2game's capture comparison). Defaults to the Simulation profile.

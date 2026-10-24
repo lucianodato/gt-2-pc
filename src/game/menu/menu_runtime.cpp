@@ -1,4 +1,5 @@
 #include "game/menu/menu_runtime.h"
+#include "gt2formats/exe_profile.h"
 #include "game/pc_features.h"
 
 #include <algorithm>
@@ -109,6 +110,14 @@ MenuData MenuData::Load(const DiscImage& disc, const GtfsVolume& vol) {
     MenuData d{career::CareerData::Load(disc, vol), {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}};
     d.career.strict = false; // the game takes the native approximations the career model names (garage.h)
     d.events = career::EventMenuData::Load(d.career.ovl4);
+    // 0x80019DCC: addiu v1,v1,-N. N is the number of events not counted toward completion (retail 29; GT2+ Complete
+    // adds four counted events with its 206 and Opel/Vauxhall events, leaving 25). Read the patched immediate so the
+    // completion percentage follows the disc instead of a hardcoded 1.2 value.
+    try {
+        const int excluded = 0x100 - int(d.career.ovl4.Get<uint8_t>(0x80019DCCu));
+        if (excluded >= 1 && excluded <= 0x40) d.completionExcludedEvents = excluded;
+    } catch (const std::exception&) {
+    }
     d.eventInfos = career::BuildEventInfos(d.career, d.events);
     d.strings = ParseUniStrDb(vol.Read("carparam/usa_unistrdb.dat"));
     d.colours = std::make_unique<CarColorNames>(CarColorNames::Load(vol));
@@ -1178,13 +1187,13 @@ bool MenuRuntime::DrawDynamic(const MenuAssets& assets, const MenuItem& it, std:
         return true;
     }
     case 0x48: // power before the part (0x801C309C), "%dhp" (0x8001FFCC) right-aligned, colour 0x145A78
-        text.Right(W(Format(global(kGlobalHp), (transaction_.powerBefore * 1000) / 0x3F6)), false, second, it.x1, it.y1, kPowerColour);
+        text.Right(W(Format(global(kGlobalHp), DisplayPower(assets.ovl4, transaction_.powerBefore))), false, second, it.x1, it.y1, kPowerColour);
         return true;
     case 0x49: // power after (0x801C30A0): "----" left when there is no such part
         if (transaction_.powerAfter < 0) text.Left(W(ReadAscii(o4, kFormatNone)), true, second, it.x0, it.y1, kPowerColour);
-        else text.Right(W(Format(global(kGlobalHp), (transaction_.powerAfter * 1000) / 0x3F6)), false, second, it.x1, it.y1, kPowerColour);
+        else text.Right(W(Format(global(kGlobalHp), DisplayPower(assets.ovl4, transaction_.powerAfter))), false, second, it.x1, it.y1, kPowerColour);
         return true;
-    case 0x4A: left8(Format(global(kGlobalHp), (car_.power * 1000) / 0x3F6)); return true;
+    case 0x4A: left8(Format(global(kGlobalHp), DisplayPower(assets.ovl4, car_.power))); return true;
     case 0x4C: left8(Format(global(kGlobalLb), (car_.weight * 0x561E) / 10000)); return true;
     case 0x4E: {
         const Transaction& t = transaction_;
@@ -1256,8 +1265,8 @@ bool MenuRuntime::DrawDynamic(const MenuAssets& assets, const MenuItem& it, std:
     }
     case 0xB9:
         if (car_.power < 1) left8(ReadAscii(o4, kFormatNone));
-        else if (car_.powerRpm < 1) left8(Format(assets.String(kTxdHp), (car_.power * 1000) / 0x3F6, car_.powerRpm));
-        else left8(Format(assets.String(kTxdPowerRpm), (car_.power * 1000) / 0x3F6, car_.powerRpm));
+        else if (car_.powerRpm < 1) left8(Format(assets.String(kTxdHp), DisplayPower(assets.ovl4, car_.power), car_.powerRpm));
+        else left8(Format(assets.String(kTxdPowerRpm), DisplayPower(assets.ovl4, car_.power), car_.powerRpm));
         return true;
     case 0xB8: { // engine texts (0x8001B2B8 / 0x8001B338): view +0x1C, then +0x24 12 px after it; "" without a car
         const std::u16string a = car_.shown ? data_.String(uint16_t(car_.engineText[0])) : std::u16string();
@@ -1281,7 +1290,10 @@ bool MenuRuntime::DrawDynamic(const MenuAssets& assets, const MenuItem& it, std:
         const int32_t events = int32_t(data_.events.events.size());
         int won = 0;
         for (int32_t i = 0; i < events; i++) won += career::ResultAt(s.record, i) == 1;
-        const int v = (won * 10000) / (events - 29);
+        const int32_t denominator = events - data_.completionExcludedEvents;
+        int v = denominator > 0 ? (won * 10000) / denominator : 0;
+        if (v < 0) v = 0;
+        if (v > 10000) v = 10000;
         right8(Format(ReadAscii(o4, kFormatFraction), v / 100, v % 100));
         return true;
     }

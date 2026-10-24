@@ -150,6 +150,7 @@ struct MenuData {
     NavVectors vectors;
     std::unique_ptr<UsedCarLists> usedCars;      // .usedcar_usa (the used-car lots, 0x800224E0)
     std::unique_ptr<MenuListNames> listNames;    // names / chip colours of the popup lists' rows
+    int completionExcludedEvents = 29;           // 0x80019DCC: the immediate subtracted from the event count (GT2+ Complete: 25)
     static MenuData Load(const DiscImage& disc, const GtfsVolume& vol);
     std::u16string String(uint16_t index) const; // 0x80076C14
 };

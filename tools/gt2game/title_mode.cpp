@@ -491,7 +491,7 @@ int RunTitleMode(const DiscImage& disc, const GtfsVolume& vol, const TitleModeOp
     };
     { // 0x80011384: the first-boot view runs while 0x801EF5F0 == 0 (our process start)
         std::vector<uint8_t> image;
-        if (shell::CardStatus(slots[0], &image) == 0 && shell::CardFindFile(image, "BASCUS-94455GAME") >= 0 && options.careerPath.empty()) {
+        if (shell::CardStatus(slots[0], &image) == 0 && shell::CardFindFile(image, CurrentSaveNames().game) >= 0 && options.careerPath.empty()) {
             screen = Screen::kBootLoad;
             boot.state = 3;
             boot.remaining = 0x7F00 + 0x80;

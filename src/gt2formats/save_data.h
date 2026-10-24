@@ -25,8 +25,23 @@
 #include "gt2formats/car_params.h"
 
 namespace gt2 {
+struct GuestImage;
 
-constexpr const char* kSaveGameFileName = "BASCUS-94455GAME"; // EXE 0x80091C94 (replays: "BASCUS-94455REPLAY", 0x80091AB8)
+// The save file names the executable uses. Retail is "BASCUS-94455GAME" / "BASCUS-94455REPLAY"; mods that change the
+// game id (e.g. GT2+ uses ...GAME7C / ...REPL7C) patch the strings in the EXE, so they are read from the image.
+struct SaveNames {
+    std::string game = "BASCUS-94455GAME";     // EXE 0x80091C94
+    std::string replay = "BASCUS-94455REPLAY"; // EXE 0x80091AB8
+    std::string arcade = "BASCUS-94455GAME";   // EXE 0x8009198C (the Arcade disc's own name)
+};
+SaveNames LoadSaveNames(const GuestImage& exe);
+const SaveNames& CurrentSaveNames();
+void SetSaveNames(SaveNames names);
+// True for the exact file name, or for a modded variant of the retail name (e.g. BASCUS-94455GAME7C) when the caller
+// still holds the retail default (tools that read a card before loading the executable).
+bool SaveFileNameMatches(const std::string& name, const std::string& wanted);
+
+constexpr const char* kSaveGameFileName = "BASCUS-94455GAME"; // retail fallback / documentation; use CurrentSaveNames().game at run time
 constexpr size_t kSaveFileSize = 0x7EA0;
 constexpr size_t kSaveHeaderSize = 0x200;
 constexpr size_t kSaveStateSize = 0x7C9C;        // RAM 0x801C98E0 .. 0x801D157B

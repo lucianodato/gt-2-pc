@@ -133,9 +133,10 @@ CareerSave LoadCareerSaveFile(std::span<const uint8_t> file) {
 }
 
 CareerSave LoadCareerFromCard(std::span<const uint8_t> card) {
+    const std::string& name = CurrentSaveNames().game;
     for (const MemoryCardFile& f : ReadMemoryCardFiles(card))
-        if (f.name == kSaveGameFileName) return LoadCareerSaveFile(f.bytes);
-    throw std::runtime_error(std::string("no ") + kSaveGameFileName + " on the memory card");
+        if (SaveFileNameMatches(f.name, name)) return LoadCareerSaveFile(f.bytes);
+    throw std::runtime_error("no " + name + " on the memory card");
 }
 
 CareerSave LoadCareer(const std::string& path) {
@@ -194,6 +195,7 @@ std::vector<uint8_t> FormatMemoryCard() {
 
 void StoreCareerOnCard(std::vector<uint8_t>& card, const CareerSave& save) {
     if (card.size() != kCardSize || card[0] != 'M' || card[1] != 'C') throw std::runtime_error("not a PS1 memory card image");
+    const std::string& saveName = CurrentSaveNames().game;
     const std::vector<uint8_t> file = BuildCareerSaveFile(save);
     const size_t blocks = (file.size() + kBlock - 1) / kBlock; // 4 (0x8006A000)
     std::vector<size_t> chain;
@@ -201,7 +203,7 @@ void StoreCareerOnCard(std::vector<uint8_t>& card, const CareerSave& save) {
         const uint8_t* f = card.data() + i * kFrame;
         if (Le32(f) != 0x51) continue;
         const char* name = reinterpret_cast<const char*>(f + 10);
-        if (std::string(name, strnlen(name, 20)) != kSaveGameFileName) continue;
+        if (!SaveFileNameMatches(std::string(name, strnlen(name, 20)), saveName)) continue;
         size_t block = i;
         for (size_t guard = 0; guard < kDirFrames; guard++) {
             chain.push_back(block);
@@ -222,7 +224,7 @@ void StoreCareerOnCard(std::vector<uint8_t>& card, const CareerSave& save) {
             PutLe32(f, k == 0 ? 0x51 : (k + 1 == chain.size() ? 0x53 : 0x52));
             PutLe32(f + 4, k == 0 ? uint32_t(blocks * kBlock) : 0);
             PutLe16(f + 8, k + 1 == chain.size() ? 0xFFFF : uint16_t(chain[k + 1] - 1));
-            if (k == 0) std::memcpy(f + 10, kSaveGameFileName, std::strlen(kSaveGameFileName));
+            if (k == 0) std::memcpy(f + 10, saveName.c_str(), saveName.size());
             f[kFrame - 1] = FrameChecksum(f);
         }
     }

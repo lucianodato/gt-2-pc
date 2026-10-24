@@ -2,11 +2,15 @@
 #include "gt2formats/boot_images.h"
 #include "gt2formats/overlay_data.h"
 #include "gt2formats/gt_menu.h"
+#include "gt2formats/car_params.h"
+#include "gt2formats/gtmode_tables.h"
+#include "gt2formats/save_data.h"
 #include "gt2formats/exe_profile.h"
 #include "gt2formats/str_video.h"
 #include "gt2vfs/gtfs.h"
 #include "game/arcade/arcade_menus.h"
 #include "game/menu/menu_runtime.h"
+#include "game/career/tuning.h"
 #include "game/shell/title_attract.h"
 #include "game/sim/ground.h"
 #include "game/arcade/arcade_setup.h"
@@ -293,10 +297,62 @@ static void CheckPcChanges(const char* discPath) {
         Check(actual == expected, "race music resumes sample-identically at the paused position");
     }
 }
+static void CheckGt2PlusRules() {
+    using namespace gt2;
+    career::TuneSheet sheet{};
+    for (auto& row : sheet.turboKitRow) row = 0xFFFFFFFFu;
+    sheet.turboKitRow[0] = 1; // a real stock turbo, no upgrade rows
+    Check(!career::HasTurboKit(sheet, false), "retail turbo check ignores the stock kit");
+    Check(career::HasTurboKit(sheet, true), "GT2+ turbo check accepts the stock kit");
+    sheet.turboKitRow[0] = 0; // the NA dummy row
+    sheet.turboKitRow[1] = 5;
+    Check(career::HasTurboKit(sheet, false) && career::HasTurboKit(sheet, true), "both turbo checks accept an upgrade kit");
+
+    GuestImage retail;
+    retail.profile = &SimProfile();
+    Check(DisplayPower(retail, 300) == 295, "retail power display converts PS to BHP");
+    if (const ExeProfile* plus = FindProfile("9d733c40f91b7ff5c6b4e4141ce3ebf8f4f5bde1")) {
+        GuestImage patched;
+        patched.profile = plus;
+        Check(plus->gt2Plus && DisplayPower(patched, 300) == 300, "GT2+ Complete power display uses raw PS");
+    }
+}
+
+static void CheckGt2PlusDisc(const char* path) {
+    using namespace gt2;
+    if (!path) return;
+    DiscImage disc(path);
+    const GuestImage exe = LoadExeImage(disc);
+    const ExeProfile& profile = ProfileOf(exe);
+    const SaveNames names = LoadSaveNames(exe);
+    if (profile.gt2Plus) {
+        Check(names.game == "BASCUS-94455GAME7C" && names.replay == "BASCUS-94455REPL7C", "GT2+ save ids read from the patched EXE");
+        GtfsVolume vol(disc);
+        const menu::MenuData data = menu::MenuData::Load(disc, vol);
+        Check(data.completionExcludedEvents == 25, "GT2+ completion excludes 25 events");
+        const CarParamTables tables = CarParamTables::Load(vol);
+        Check(tables.RowCount(kTableBrakeController) > 1 && tables.Row(kTableBrakeController, 1)[8] == 1,
+              "GT2+ brake controller stage row");
+        const auto strings = ParseUniStrDb(vol.Read("carparam/usa_unistrdb.dat"));
+        Check(strings.size() > 66 && strings[50] == u"2-Rotor" && strings[66] == u"3-Rotor", "GT2+ rotary labels");
+        Check(std::find(data.events.randomCourses.begin(), data.events.randomCourses.end(), "new_parmaS") != data.events.randomCourses.end(),
+              "GT2+ Apricot Hill course name");
+        Check(std::find(data.events.randomCourses.begin(), data.events.randomCourses.end(), "new_paramaS") == data.events.randomCourses.end(),
+              "GT2+ random course list has no typo");
+    } else if (profile.build == ExeBuild::kSimUs12) {
+        Check(names.game == "BASCUS-94455GAME" && names.replay == "BASCUS-94455REPLAY", "retail save ids");
+        GtfsVolume vol(disc);
+        const menu::MenuData data = menu::MenuData::Load(disc, vol);
+        Check(data.completionExcludedEvents == 29, "retail completion excludes 29 events");
+    }
+}
+
 int main(int argc, char** argv) {
     try {
         CheckRegionalUiTail();
         CheckGmPagePictures();
+        CheckGt2PlusRules();
+        CheckGt2PlusDisc(argc > 1 ? argv[1] : nullptr);
         CheckRegionalCareerScreens(argc > 1 ? argv[1] : nullptr);
         {
             // An indexed row validates nibble order and PS1 BGR555 conversion.

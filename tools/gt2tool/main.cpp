@@ -1052,11 +1052,12 @@ int CmdSaveInfo(const GtfsVolume& vol, const std::string& path) {
     GameSave save;
     if (bytes.size() == 128 * 1024 && bytes[0] == 'M' && bytes[1] == 'C') {
         std::optional<MemoryCardFile> file;
+        const std::string saveName = CurrentSaveNames().game;
         for (MemoryCardFile& f : ReadMemoryCardFiles(bytes)) {
             std::printf("card file %-20s %6u bytes, first block %d\n", f.name.c_str(), f.size, f.firstBlock);
-            if (f.name == kSaveGameFileName) file = std::move(f);
+            if (SaveFileNameMatches(f.name, saveName)) file = std::move(f);
         }
-        if (!file) throw std::runtime_error(std::string("no ") + kSaveGameFileName + " on the card");
+        if (!file) throw std::runtime_error("no " + saveName + " on the card");
         save = ParseGameSave(file->bytes);
         std::printf("save: header '%c%c' icon flags 0x%02X blocks %u, CRC stored %08X computed %08X -> %s\n", save.header[0], save.header[1],
                     save.header[2], save.header[3], save.storedCrc, save.computedCrc, save.CrcOk() ? "ok" : "MISMATCH");

@@ -77,6 +77,9 @@ int32_t PartKindOfStage(int32_t tuneKind, int32_t stage);
 
 // 0x8005F858(sheet): racing-modification bodies available (consecutive filled slots 1..4).
 int32_t RacingBodyCount(const TuneSheet& s);
+// 0x8005F7C8: a turbo kit row exists. Retail scans stages 1..4 (kit 0 is the dummy row of NA cars); GT2+ also
+// accepts a real stock turbo at kit 0 (row id > 0).
+bool HasTurboKit(const TuneSheet& s, bool gt2Plus);
 // 0x800174F4: body 1 chosen (`racingBody` = 0x800B5C78), returns its model id (slot +8).
 uint32_t FirstRacingBody(const TuneSheet& s, int16_t& racingBody);
 // 0x80017530: the next body (wraps to 1 after the last), returns its model id.

@@ -474,8 +474,9 @@ SoloData ParseSoloData(std::span<const uint8_t> d) {
     at += 4;
     if (at + 8 * m != d.size()) throw std::runtime_error("solodata: size mismatch");
     for (size_t i = 0; i < m; i++) s.cars.emplace_back(U32(d, at + 8 * i), U32(d, at + 8 * i + 4));
-    for (size_t i = 1; i < m; i++)
-        if (s.cars[i].first <= s.cars[i - 1].first) throw std::runtime_error("solodata: car ids not sorted");
+    // GT2+ appends its new cars without re-sorting this table. Sort a copy for the binary search; the original's
+    // binary search would miss the appended entries, but the modded game still uses them through the menu pages.
+    std::sort(s.cars.begin(), s.cars.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
     return s;
 }
 

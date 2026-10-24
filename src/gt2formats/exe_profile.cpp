@@ -19,6 +19,13 @@ const ExeProfile kProfiles[] = {
         true, true, false,
     },
     {
+        // The patched executable of GT2+ Complete beta 7 for US Simulation v1.2. The patches are in-place: the
+        // PS-X EXE header (t_addr 0x80010000, t_size 0x99000) and every decompressed GT2.OVL member size match the
+        // retail build, so addresses are identical and no ranges are needed.
+        "US Simulation v1.2 (GT2+ Complete)", "SCUS_944.88", "9d733c40f91b7ff5c6b4e4141ce3ebf8f4f5bde1",
+        ExeBuild::kSimUs12, true, {}, true, true, false, true, true,
+    },
+    {
         // race_frame: Arcade 0x80015B64 (same address, 178 words differ: pad 1 only); UpdateWheelEffects: Arcade 0x8004269C
         // without the Simulation tail (gt2tool exe-map, arcade_disc.md section 5.3).
         "US Arcade v1.1", "SCUS_944.55", "231f9dba7191b9ef915621662afdc40a7c66df95", ExeBuild::kArcadeUs11, false,
@@ -81,10 +88,17 @@ const ExeProfile* FindProfile(std::string_view exeSha1) {
 const ExeProfile& ProfileOf(const GuestImage& exe) {
     if (exe.profile) return *exe.profile;
     throw std::runtime_error("executable " + exe.fileName + " (SHA-1 " + exe.fileSha1 +
-                             ") is not a known build: supported are US Simulation v1.2 (SCUS_944.88), US Arcade v1.1 (SCUS_944.55), Europe Simulation (SCES_123.80) and Europe Arcade (SCES_023.80)");
+                             ") is not a known build: supported are US Simulation v1.2 (SCUS_944.88), US Simulation v1.2 GT2+ (same EXE name, patched), US Arcade v1.1 (SCUS_944.55), Europe Simulation (SCES_123.80) and Europe Arcade (SCES_023.80)");
 }
 
 const ExeProfile& ProfileOf(const DiscImage& disc) { return ProfileOf(LoadExeImage(disc)); }
+
+bool UsesMetricHorsepower(const GuestImage& exe) { return exe.profile && exe.profile->gt2PlusMetricHorsepower; }
+
+int32_t DisplayPower(const GuestImage& exe, int32_t ps) {
+    if (UsesMetricHorsepower(exe)) return ps;
+    return int32_t((int64_t(ps) * 1000) / 0x3F6);
+}
 
 const ExeProfile& ActiveProfile() { return *g_active; }
 void SetActiveProfile(const ExeProfile& profile) { g_active = &profile; }

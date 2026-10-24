@@ -70,7 +70,7 @@ std::vector<size_t> ReplayFileBlocks(const std::vector<uint8_t>& card) {
     std::vector<size_t> chain;
     for (size_t i = 1; i <= kCardBlocks; i++) {
         const uint8_t* f = card.data() + i * kFrame;
-        if (f[0] != 0x51 || std::strncmp(reinterpret_cast<const char*>(f + 10), kReplayCardFileName, 20) != 0) continue;
+        if (f[0] != 0x51 || std::strncmp(reinterpret_cast<const char*>(f + 10), CurrentSaveNames().replay.c_str(), 20) != 0) continue;
         size_t b = i;
         for (size_t guard = 0; guard < kCardBlocks; guard++) {
             chain.push_back(b);
@@ -98,7 +98,7 @@ bool CreateReplayFile(std::vector<uint8_t>& card, int blocks) {
         if (n == 0) {
             const uint32_t size = uint32_t(blocks) * uint32_t(kBlockBytes);
             std::memcpy(f + 4, &size, 4);
-            std::memcpy(f + 10, kReplayCardFileName, std::strlen(kReplayCardFileName));
+            std::memcpy(f + 10, CurrentSaveNames().replay.c_str(), CurrentSaveNames().replay.size());
         }
         const uint16_t next = n + 1 < free.size() ? uint16_t(free[n + 1] - 1) : 0xFFFF;
         f[8] = uint8_t(next), f[9] = uint8_t(next >> 8);
@@ -131,7 +131,7 @@ void CopyReplayScreen::Poll() {
     for (size_t s = 0; s < 2; s++) {
         std::vector<uint8_t> image;
         status_[s] = CardStatus(slots_[s], &image);
-        hasFile_[s] = status_[s] == 0 && CardFindFile(image, kReplayCardFileName) >= 0;
+        hasFile_[s] = status_[s] == 0 && CardFindFile(image, CurrentSaveNames().replay) >= 0;
         freeBlocks_[s] = status_[s] == 0 ? CardFreeBlocks(image) : 0;
     }
 }

@@ -25,7 +25,6 @@ constexpr uint32_t kCardError = 0x801EF1C3u, kStartLoading = 0x801EF2B7u, kLoadi
 constexpr uint32_t kLoadFailed = 0x801EF2F6u, kNoGameFile = 0x801EF3CFu, kCorrupt = 0x801EF3F4u;
 // ---- EXE (US Arcade v1.1; Simulation 0x80091EC8 / 0x80091EE4)
 constexpr uint32_t kBarText = 0x80091BC0u, kBarZero = 0x80091BDCu;
-constexpr char kSaveName[] = "BASCUS-94455GAME"; // EXE 0x8009198C
 constexpr uint32_t kFileSize = 0x7EA0;            // 0x80069F08
 constexpr size_t kFileGarage = 0x200 + 0x3C74, kGarageSize = 0x4028; // 0x8006A1C4
 constexpr int kExit = 10, kLoaded = 8;
@@ -246,7 +245,7 @@ int ArcadeGuestLoad::EnterState(int id) {
         return -1;
     case 7: { // 0x800247D0: 0x8006A0C4 starts the read of the file (0x7EA0 bytes, rounded to 0x7F00)
         std::vector<uint8_t> card;
-        if (shell::CardStatus(slots_[size_t(slot_)], &card) != 0 || shell::CardFindFile(card, kSaveName) < 0) {
+        if (shell::CardStatus(slots_[size_t(slot_)], &card) != 0 || shell::CardFindFile(card, CurrentSaveNames().arcade) < 0) {
             error_ = kLoadFailed;
             return 1;
         }
@@ -296,7 +295,7 @@ int ArcadeGuestLoad::Step() {
         std::vector<uint8_t> card;
         const int status = shell::CardStatus(slots_[size_t(slot_)], &card);
         if (status == 1) return -1;
-        if (status == 0) return shell::CardFindFile(card, kSaveName) >= 0 ? 6 : 5; // 0x80069FE4
+        if (status == 0) return shell::CardFindFile(card, CurrentSaveNames().arcade) >= 0 ? 6 : 5; // 0x80069FE4
         if (status == 2) return 4;
         if (status == 4) {
             error_ = kCardError;
