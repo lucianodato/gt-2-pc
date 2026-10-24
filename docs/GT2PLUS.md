@@ -49,6 +49,11 @@ These are the only GT2+ executable/overlay patches that the reimplemented code h
 This GT2+ image does **not** contain the Light version's wheel-shop message patch: `0x47E0` still requests message
 `0x1E`. The port therefore keeps `0x1E` for this image.
 
+The Complete volume also omits `sound/sys.ins`, the resident menu-effect bank. The port keeps menu music working
+but leaves menu effects silent, as the rebuilt volume provides no effect samples. To restore the retail menu
+effects only, extract `sound/sys.ins` from an unmodified retail disc and place it at
+`<data-directory>/assets/sound/sys.ins`; the existing asset override will use it.
+
 ## Check
 
 ```sh
