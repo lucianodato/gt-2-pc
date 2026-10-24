@@ -20,6 +20,15 @@ uint32_t ReadU32(const uint8_t* p) {
     return static_cast<uint32_t>(p[0] | (p[1] << 8) | (p[2] << 16) | (static_cast<uint32_t>(p[3]) << 24));
 }
 
+std::vector<uint8_t> ReadInstalledFile(const std::filesystem::path& path, const std::string& name) {
+    const auto size = std::filesystem::file_size(path);
+    if (size > 256 * 1024 * 1024) throw std::runtime_error("installed asset too large: " + name);
+    std::ifstream in(path, std::ios::binary);
+    std::vector<uint8_t> data(static_cast<size_t>(size));
+    if (!in.read(reinterpret_cast<char*>(data.data()), std::streamsize(data.size()))) throw std::runtime_error("cannot read installed asset: " + name);
+    return data; // installation stores already-inflated bytes, including entries named *.gz
+}
+
 } // namespace
 
 GtfsVolume::GtfsVolume(const DiscImage& disc) : disc_(disc) {
@@ -91,14 +100,7 @@ std::vector<uint8_t> GtfsVolume::ReadStored(const GtfsEntry& e) const {
 std::vector<uint8_t> GtfsVolume::Read(const GtfsEntry& e) const {
     if (!disc_.DataDirectory().empty()) {
         const auto path = std::filesystem::path(disc_.DataDirectory()) / "assets" / e.path;
-        if (std::filesystem::is_regular_file(path)) {
-            const auto size = std::filesystem::file_size(path);
-            if (size > 256 * 1024 * 1024) throw std::runtime_error("installed asset too large: " + e.path);
-            std::ifstream in(path, std::ios::binary);
-            std::vector<uint8_t> data(static_cast<size_t>(size));
-            if (!in.read(reinterpret_cast<char*>(data.data()), std::streamsize(data.size()))) throw std::runtime_error("cannot read installed asset: " + e.path);
-            return data; // installation stores already-inflated bytes, including entries named *.gz
-        }
+        if (std::filesystem::is_regular_file(path)) return ReadInstalledFile(path, e.path);
     }
     auto data = ReadStored(e);
     return IsGzip(data) ? Gunzip(data) : data;
@@ -107,8 +109,17 @@ std::vector<uint8_t> GtfsVolume::Read(const GtfsEntry& e) const {
 std::vector<uint8_t> GtfsVolume::Read(const std::string& path) const {
     const GtfsEntry* e = Find(path);
     if (!e) e = Find(path + ".gz");
-    if (!e) throw std::runtime_error("not found in GT2.VOL: " + path);
-    return Read(*e);
+    if (e) return Read(*e);
+    // A modded volume may omit a file entirely (GT2+ Complete drops sound/sys.ins). An installed asset at the same
+    // path is then the only source; the original would read through its file table, which the port does not have.
+    if (!disc_.DataDirectory().empty()) {
+        const auto base = std::filesystem::path(disc_.DataDirectory()) / "assets";
+        for (const std::string& candidate : {path, path + ".gz"}) {
+            const auto asset = base / candidate;
+            if (std::filesystem::is_regular_file(asset)) return ReadInstalledFile(asset, candidate);
+        }
+    }
+    throw std::runtime_error("not found in GT2.VOL: " + path);
 }
 
 } // namespace gt2
