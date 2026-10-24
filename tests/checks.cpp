@@ -7,6 +7,7 @@
 #include "gt2formats/save_data.h"
 #include "gt2formats/exe_profile.h"
 #include "gt2formats/str_video.h"
+#include "game/menu/menu_car.h"
 #include "gt2vfs/gtfs.h"
 #include "game/arcade/arcade_menus.h"
 #include "game/menu/menu_runtime.h"
@@ -298,6 +299,7 @@ static void CheckPcChanges(const char* discPath) {
         Check(actual == expected, "race music resumes sample-identically at the paused position");
     }
 }
+
 static void CheckGt2PlusRules() {
     using namespace gt2;
     career::TuneSheet sheet{};
@@ -349,12 +351,27 @@ static void CheckGt2PlusDisc(const char* path) {
     }
 }
 
+static void CheckLicenceBonusModelMotion() {
+    using namespace gt2;
+    menu::OverlayModelCamera camera = menu::ModelViewCamera(0x160, 0x1E0); // 0x8004E070
+    camera.floor = false;                                                 // 0x8004E080
+    const int16_t startYaw = camera.yaw;
+    menu::LicenceBonusModelMotion(camera, 1); // 0x8004E804(camera, t): the licence BONUS's GT car
+    Check(camera.position[2] == (1 * 0x80000) / 0x5A + 0x40000, "licence bonus camera: z at t = 1");
+    Check(camera.roll == -534, "licence bonus camera: roll at t = 1");
+    Check(camera.pitch == -0x20 && camera.position[0] == 0, "licence bonus camera: pitch and x");
+    Check(camera.yaw == ((startYaw + 0x84 - 1) & 0x3FFF), "licence bonus camera: yaw at t = 1");
+    menu::LicenceBonusModelMotion(camera, 0x5A);
+    Check(camera.position[2] == 0xC0000 && camera.roll == 0, "licence bonus camera: settled at t = 90");
+}
+
 int main(int argc, char** argv) {
     try {
         CheckRegionalUiTail();
         CheckGmPagePictures();
         CheckGt2PlusRules();
         CheckGt2PlusDisc(argc > 1 ? argv[1] : nullptr);
+        CheckLicenceBonusModelMotion();
         CheckRegionalCareerScreens(argc > 1 ? argv[1] : nullptr);
         {
             // An indexed row validates nibble order and PS1 BGR555 conversion.
