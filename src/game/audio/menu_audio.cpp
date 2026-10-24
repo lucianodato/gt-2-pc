@@ -1,5 +1,6 @@
 #include "game/audio/menu_audio.h"
 
+#include <cstdio>
 #include <stdexcept>
 
 #include "game/audio/race_audio.h"
@@ -45,8 +46,16 @@ void MenuAudio::Load(const GtfsVolume& vol, const GuestImage& exe, const GuestIm
         if (!mixer_.Upload(address, bank.data)) throw std::runtime_error("menu sound: bank does not fit the sample RAM");
         for (InstSample& s : bank.samples) s.address = uint16_t(s.address + (address >> 3)); // 0x80078974
     };
-    system_ = ParseInstBank(vol.Read("sound/sys.ins")); // 0x80011CE4 (EXE load): resident
-    upload(system_, kSystemBankAddress);
+    // 0x80011CE4 (EXE load): resident. GT2+ Complete omits sound/sys.ins from the rebuilt volume; the bank is
+    // missing in that image, so keep the effects silent but still load the music bank and sequences (the original
+    // boot also continues when a file is absent).
+    try {
+        system_ = ParseInstBank(vol.Read("sound/sys.ins"));
+        upload(system_, kSystemBankAddress);
+    } catch (const std::exception& e) {
+        system_ = InstBank{};
+        std::fprintf(stderr, "menu sound: %s; menu effects disabled\n", e.what());
+    }
     const std::vector<uint8_t> musicBank = vol.Read("sound/gtmseq.ins"); // 0x80022874 at the GT-mode entry
     music_ = ParseInstBank(musicBank);
     programs_ = ParseInstPrograms(musicBank);
@@ -78,8 +87,14 @@ void MenuAudio::LoadArcade(const GtfsVolume& vol, const GuestImage& exe) {
         if (!mixer_.Upload(address, bank.data)) throw std::runtime_error("menu sound: bank does not fit the sample RAM");
         for (InstSample& s : bank.samples) s.address = uint16_t(s.address + (address >> 3)); // 0x80078974
     };
-    system_ = ParseInstBank(vol.Read("sound/sys.ins")); // resident (EXE load), as on the Simulation disc
-    upload(system_, kSystemBankAddress);
+    // Resident on the retail Arcade disc; tolerate its absence in a rebuilt volume like the Simulation path.
+    try {
+        system_ = ParseInstBank(vol.Read("sound/sys.ins"));
+        upload(system_, kSystemBankAddress);
+    } catch (const std::exception& e) {
+        system_ = InstBank{};
+        std::fprintf(stderr, "menu sound: %s; menu effects disabled\n", e.what());
+    }
     // Member 2's 0x800257CC: file id 216 (arcade file table 0x801E2950 -> VOL 0x296F sound/arcseq.ins) as the bank, then
     // id 215 (0x296E sound/arcade.seq) behind it; the bank lands behind sys.ins like gtmseq.ins (SPU 0x9630, the captured
     // voices' start addresses: docs/formats/sound.md section 9).

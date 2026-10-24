@@ -11,6 +11,7 @@
 #include "game/arcade/arcade_menus.h"
 #include "game/menu/menu_runtime.h"
 #include "game/career/tuning.h"
+#include "game/audio/menu_audio.h"
 #include "game/shell/title_attract.h"
 #include "game/sim/ground.h"
 #include "game/arcade/arcade_setup.h"
@@ -325,9 +326,11 @@ static void CheckGt2PlusDisc(const char* path) {
     const GuestImage exe = LoadExeImage(disc);
     const ExeProfile& profile = ProfileOf(exe);
     const SaveNames names = LoadSaveNames(exe);
+    GtfsVolume vol(disc);
+    audio::MenuAudio menuAudio;
+    menuAudio.Load(vol, exe, LoadOverlayImage(disc, 4)); // GT2+ omits sound/sys.ins: the music must still load
     if (profile.gt2Plus) {
         Check(names.game == "BASCUS-94455GAME7C" && names.replay == "BASCUS-94455REPL7C", "GT2+ save ids read from the patched EXE");
-        GtfsVolume vol(disc);
         const menu::MenuData data = menu::MenuData::Load(disc, vol);
         Check(data.completionExcludedEvents == 25, "GT2+ completion excludes 25 events");
         const CarParamTables tables = CarParamTables::Load(vol);
@@ -341,7 +344,6 @@ static void CheckGt2PlusDisc(const char* path) {
               "GT2+ random course list has no typo");
     } else if (profile.build == ExeBuild::kSimUs12) {
         Check(names.game == "BASCUS-94455GAME" && names.replay == "BASCUS-94455REPLAY", "retail save ids");
-        GtfsVolume vol(disc);
         const menu::MenuData data = menu::MenuData::Load(disc, vol);
         Check(data.completionExcludedEvents == 29, "retail completion excludes 29 events");
     }
