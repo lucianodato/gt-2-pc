@@ -26,10 +26,31 @@ foreach ($entry in $manifest.files) {
     $path = Join-Path $root $entry.path
     if (!(Test-Path -LiteralPath $path -PathType Leaf) -or (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -ne $entry.sha256) { throw "Release file failed verification: $($entry.path)" }
 }
-foreach ($required in @($apkName,'tools/gt2game.exe','tools/openxr_loader.dll','tools/gt2install.exe','tools/gt2checks.exe','scripts/install-player.ps1','scripts/install.ps1','scripts/install-quest.ps1','scripts/platform-tools.ps1','scripts/transfer-saves.ps1')) {
-    if (!$seen.ContainsKey($required)) { throw "Required release file is missing from the manifest: $required" }
+$required = @('tools/gt2game.exe','tools/openxr_loader.dll','tools/gt2install.exe','tools/gt2checks.exe','scripts/install-player.ps1','scripts/install.ps1','scripts/launch.ps1','scripts/platform-tools.ps1','scripts/transfer-saves.ps1')
+if ($Target -eq 'Quest') { $required += @($apkName,'scripts/install-quest.ps1') }
+foreach ($requiredFile in $required) {
+    if (!$seen.ContainsKey($requiredFile)) { throw "Required release file is missing from the manifest: $requiredFile" }
 }
 if ($VerifyOnly) { Write-Host 'Release files verified.'; return }
+if (!$PSBoundParameters.ContainsKey('InstallDir')) {
+    $locationFile = Join-Path $root 'install-location.txt'
+    if (Test-Path -LiteralPath $locationFile) {
+        $saved = (Get-Content -LiteralPath $locationFile -Raw -Encoding UTF8).Trim()
+        if ($saved) { $InstallDir = $saved }
+    }
+    if ($Target -ne 'Quest') {
+        Add-Type -AssemblyName System.Windows.Forms
+        $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+        $dialog.Description = 'Choose where GT2 keeps discs, saves and media. Keep it outside the program folder.'
+        $dialog.SelectedPath = $env:USERPROFILE
+        if (Test-Path -LiteralPath $InstallDir) { $dialog.SelectedPath = $InstallDir }
+        $dialog.ShowNewFolderButton = $true
+        try {
+            if ($dialog.ShowDialog() -ne 'OK') { throw 'No game data folder selected.' }
+            $InstallDir = $dialog.SelectedPath
+        } finally { $dialog.Dispose() }
+    }
+}
 if ($Gt4Bundle) {
     . (Join-Path $PSScriptRoot 'windows-prerequisites.ps1')
     $Python = Get-Gt2Python -Python $Python
@@ -72,9 +93,11 @@ if ($Target -eq 'Quest') {
 }
 & (Join-Path $PSScriptRoot 'install.ps1') -DiscImage $DiscImage -InstallDir $InstallDir -BuildDir (Join-Path $root 'tools') -NoBuild -HdMedia $HdMedia -Bios $Bios -CaptureCore $CaptureCore
 if ($Target -eq 'Quest') {
-    $modes = @('arcade','simulation' | Where-Object { Test-Path -LiteralPath (Join-Path $InstallDir "$_/disc.raw2352") })
+    $modes = @('arcade','simulation','combined' | Where-Object { Test-Path -LiteralPath (Join-Path $InstallDir "$_/disc.raw2352") })
     if ($modes.Count -eq 0) { throw 'No prepared discs.' }
-    & (Join-Path $PSScriptRoot 'install-quest.ps1') -Adb $adbPath -Serial $Serial -Apk (Join-Path $root $apkName) -Runtime $InstallDir -Mode $modes[0] -BothDiscs:($modes.Count -eq 2) -Gt4Bundle $Gt4Bundle -Python $Python
+    $questMode = if ($modes -contains 'combined') { 'combined' } else { $modes[0] }
+    $both = ($modes -contains 'arcade') -and ($modes -contains 'simulation')
+    & (Join-Path $PSScriptRoot 'install-quest.ps1') -Adb $adbPath -Serial $Serial -Apk (Join-Path $root $apkName) -Runtime $InstallDir -Mode $questMode -BothDiscs:$both -Gt4Bundle $Gt4Bundle -Python $Python
 } else {
     if ($Gt4Bundle) {
         & $Python -E -s (Join-Path $PSScriptRoot 'install-gt4-pack.py') --bundle $Gt4Bundle --runtime $InstallDir

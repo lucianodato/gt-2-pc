@@ -3,6 +3,7 @@
 #include "gt2formats/overlay_data.h"
 #include "gt2formats/gt_menu.h"
 #include "gt2formats/exe_profile.h"
+#include "gt2formats/race_menu_assets.h"
 #include "gt2formats/str_video.h"
 #include "game/menu/menu_car.h"
 #include "gt2vfs/gtfs.h"
@@ -10,6 +11,7 @@
 #include "game/menu/menu_runtime.h"
 #include "game/shell/title_attract.h"
 #include "game/sim/ground.h"
+#include "game/sim/disc_data.h"
 #include "game/arcade/arcade_setup.h"
 #include "game/pc_features.h"
 #include "platform/input/dualsense.h"
@@ -20,8 +22,10 @@
 #include "game/audio/pause.h"
 #include "game/audio/music_player.h"
 #include "game/audio/menu_music.h"
+#include "game/shell/title_menu.h"
 #include "game/shell/title_options.h"
 #include "game/shell/title_screens.h"
+#include "gt2view/scene_types.h"
 #include <chrono>
 #include <array>
 #include <cmath>
@@ -281,20 +285,50 @@ static void CheckPcChanges(const char* discPath) {
         const auto exe = LoadExeImage(disc);
         GtfsVolume vol(disc);
         Check(!shell::AttractDemoFilePath(LoadOverlayImage(disc, 1), vol, 1).empty(), "disc attract replay resolves");
-        if (ProfileOf(exe).arcade) {
+        auto checkArcade = [&] {
+            // The combined disc keeps the Simulation build: the Arcade tables are read through the Arcade layout.
+            const GuestImage arcadeExe = IsCombinedDisc(disc) ? UiLayout(exe, true) : exe;
+            auto overlay = [&](uint32_t index) {
+                GuestImage image = LoadOverlayImage(disc, index);
+                return IsCombinedDisc(disc) ? UiLayout(std::move(image), true) : image;
+            };
             const auto assets = arcade::ArcadeMenuAssets::Load(disc, vol);
             Check(assets.data.Text(0x800F8227) == "CAR SELECTION", "Arcade English text relocation");
             Check(assets.data.Text(0x800F845F).find("%d") != std::string::npos, "Arcade course length format");
-            const auto movies = ReadStreamMovieTable(exe);
-            const auto vlc = ReadGtVlcTable(LoadOverlayImage(disc, 5), kMovieVlcTableAddress);
-            Check(vlc.entries == ReadGtVlcTable(LoadOverlayImage(disc, 2), kCourseMovieVlcTableAddress).entries,
+            Check(!assets.data.courses[0].empty(), "Arcade road course list resolves");
+            const auto movies = ReadStreamMovieTable(arcadeExe);
+            const auto vlc = ReadGtVlcTable(overlay(5), kMovieVlcTableAddress);
+            Check(vlc.entries == ReadGtVlcTable(overlay(2), kCourseMovieVlcTableAddress).entries,
                   "course and movie AC tables match");
             GtMovieReader reader(disc, StreamFileLba(disc), movies.at(5));
             GtMovieReader::Frame frame;
             Check(reader.NextFrame(frame), "course preview has a video frame");
             const auto codes = GtFrameToMdecCodes(frame.data.data(), frame.data.size(), vlc);
-            Check(!DecodeMovieFrame(MdecCoreFromExe(exe), codes).rgb.empty(), "course preview decodes");
+            Check(!DecodeMovieFrame(MdecCoreFromExe(arcadeExe), codes).rgb.empty(), "course preview decodes");
+            if (IsCombinedDisc(disc)) {
+                Check(assets.data.Text(0x800F82B1) == "TRANSMISSION", "combined disc's moved Arcade strings");
+                for (uint32_t address : {0x800F8295u, 0x800F829Au, 0x800F829Du, 0x800F82A3u, 0x800F82FAu, 0x800F8323u, 0x800F8334u,
+                                         0x800F8347u, 0x800F8352u, 0x800F8361u, 0x800F836Du, 0x800F8375u, 0x800F837Au, 0x800F838Au,
+                                         0x800F839Au, 0x800F839Fu, 0x800F83B1u, 0x800F83C4u, 0x800F83D8u, 0x800F83E4u, 0x800F841Fu,
+                                         0x800F842Eu, 0x800F8445u, 0x800F845Fu, 0x800F8469u, 0x800F8475u, 0x800F8490u})
+                    Check(!assets.data.Text(address).empty(), "combined disc Arcade text literal");
+                Check(assets.data.Text(0x800F8490).find("Courses") != std::string::npos,
+                      "combined disc's longer Arcade string is not truncated");
+                shell::TitleMenu title(LoadOverlayImage(disc, 1), 1);
+                Check(title.Widget().count == 9, "combined title menu has the Arcade Mode row");
+                const RaceMenuAssets race = RaceMenuAssets::Load(disc, vol, RaceMenuAssets::Pictures::kSettings);
+                Check(race.Text(0x801C6EE7) == "RESULTS" && race.Text(0x801C6F03) == "TOTAL TIME",
+                      "combined race post-race text resolves");
+            }
+        };
+        if (ProfileOf(exe).arcade) {
+            checkArcade();
         } else {
+            if (IsCombinedDisc(disc)) {
+                SetCombinedArcadeFlow(true);
+                try { checkArcade(); } catch (...) { SetCombinedArcadeFlow(false); throw; }
+                SetCombinedArcadeFlow(false);
+            }
             const auto data = menu::MenuData::Load(disc, vol);
             const auto pages = MenuPages::Load(vol);
             const auto assets = MenuAssets::Load(disc, vol);
@@ -318,6 +352,19 @@ static void CheckPcChanges(const char* discPath) {
     }
 }
 
+static void CheckDepthBands() {
+    using namespace gt2view;
+    DrawItem hud; // HUD, menus and panels: the top band, in front of the cockpit
+    Check(DepthBand(hud, false) == 3, "2D layers stay above the desktop cockpit");
+    DrawItem cabin; cabin.space = kSpaceScreen; cabin.cabinDepth = 1;
+    Check(DepthBand(cabin, false) == 1, "the cabin keeps its own band");
+    DrawItem world; world.space = kSpaceWorld;
+    Check(DepthBand(world, false) == 0, "the course keeps the scene band");
+    DrawItem controls; controls.space = kSpaceWorld; controls.cabinDepth = 2;
+    Check(DepthBand(controls, false) == 2, "tracked controls keep the control band");
+    Check(DepthBand(cabin, true) == 3 && DepthBand(hud, true) == 3, "stereo screen layers keep the top band");
+}
+
 static void CheckLicenceBonusModelMotion() {
     using namespace gt2;
     menu::OverlayModelCamera camera = menu::ModelViewCamera(0x160, 0x1E0); // 0x8004E070
@@ -334,8 +381,23 @@ static void CheckLicenceBonusModelMotion() {
 
 int main(int argc, char** argv) {
     try {
+        for (uint8_t speed : std::array<uint8_t, 3>{0, 80, 100}) {
+            const auto shell = gt2::sim::EventRaceShell(speed);
+            Check(shell.gameMode == 2, "GT event uses mode 2 before constants are built");
+            Check(shell.byte801D5869 == (speed == 0 ? 1 : 0), "GT event preserves standing/rolling start");
+            Check(gt2::sim::ShellControlClass(shell, false) == 0, "GT events have no wheel damage");
+            Check(gt2::sim::ShellControlClass(shell, true) == 0, "GT dirt events have no wheel damage");
+        }
+        {
+            gt2::sim::ShellState arcade;
+            arcade.gameMode = 2; arcade.modeFlag65 = 0; arcade.modeFlag5D = 1;
+            Check(gt2::sim::ShellControlClass(arcade, false) == 2, "Arcade damage option remains enabled");
+            arcade.modeFlag5D = 0;
+            Check(gt2::sim::ShellControlClass(arcade, false) == 0, "Arcade damage option remains disabled");
+        }
         CheckRegionalUiTail();
         CheckGmPagePictures();
+        CheckDepthBands();
         CheckLicenceBonusModelMotion();
         CheckRegionalCareerScreens(argc > 1 ? argv[1] : nullptr);
         {

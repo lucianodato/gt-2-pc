@@ -1,4 +1,5 @@
 #include "game_main.h"
+#include "disc_launch.h"
 #include "game_window.h"
 #include "pc_overlay.h"
 #include "../gt2mac/launch_protocol.h"
@@ -24,7 +25,18 @@ int main(int argc, char** argv) {
     SetDiscImportAvailable(launcher && std::string(launcher) == "1");
 #endif
     if (argc > 1 && !std::string(argv[1]).starts_with("--")) {
-        const int result = GameMain(argc, argv);
+        std::vector<std::string> args(argv, argv + argc);
+        int result;
+        for (;;) {
+            std::vector<char*> pointers;
+            for (auto& arg : args) pointers.push_back(arg.data());
+            result = GameMain(int(pointers.size()), pointers.data());
+            if (result != 0 || !TakeGameChangeRequest()) break;
+            const auto next = TakeGameChangePreference();
+            const bool direct = TakeGameChangeDirect();
+            if (!direct || !SwitchCombinedDiscArguments(args, next, gt2::os::SavesDir())) break;
+            SetFakePadScript({}); SetFakePad2Script({});
+        }
         ReleaseRetainedWindow();
 #ifdef __EMSCRIPTEN__
         gt2_web_game_exit(result);
@@ -68,26 +80,36 @@ int main(int argc, char** argv) {
         if (saves.empty()) saves = root / "saves";
         std::string preferred = "arcade";
         std::ifstream(saves / "last-disc.txt") >> preferred;
-        if (preferred != "arcade" && preferred != "simulation") preferred = "arcade";
+        if (!ValidDiscSelection(preferred))
+            preferred = "arcade";
         gt2::shell::InitializeSharedVrSettings(saves,
             "units=kmh\nframe_rate=display\ndraw_distance=all\ntexture_filter=smooth\n", "");
-        LoadOverlaySettings((saves / preferred / "settings.txt").string());
+        LoadOverlaySettings((saves / DescribeDiscSelection(preferred).saveMode / "settings.txt").string());
         SetWindowNoFocus(deterministic || !pickerScript.empty() || !pickerShot.empty());
         bool firstLaunch = true;
+        bool directLaunch = false;
+        auto installed = [&](const std::string& key) {
+            const auto [folder, saveMode, modeFlag] = DescribeDiscSelection(key);
+            (void)saveMode; (void)modeFlag;
+            return std::filesystem::exists(root / folder / "disc.raw2352");
+        };
         for (;;) {
-            const auto mode = SelectGameDisc(root.string(), preferred, vr, deterministic, pickerScript, pickerShot, sound, firstLaunch);
+            std::string mode;
+            if (directLaunch && installed(preferred)) mode = preferred; // combined title <-> Arcade menus
+            else mode = SelectGameDisc(root.string(), preferred, vr, deterministic, pickerScript, pickerShot, sound, firstLaunch);
+            directLaunch = false;
             if (mode.empty()) break;
             firstLaunch = false;
             preferred = mode;
             gt2::shell::WritePreferences(saves / "last-disc.txt", mode + "\n");
-            std::vector<std::string> args{argv[0], (root / mode).string(),
-                "--settings", (saves / mode / "settings.txt").string(),
-                "--card", (saves / mode / "card1.mcd").string()};
+            auto args = InstalledDiscArguments(argv[0], root, saves, mode);
             args.insert(args.end(), forwarded.begin(), forwarded.end());
             std::vector<char*> pointers;
             for (auto& arg : args) pointers.push_back(arg.data());
             result = GameMain(int(pointers.size()), pointers.data());
             if (result != 0 || !TakeGameChangeRequest()) break;
+            if (const std::string next = TakeGameChangePreference(); !next.empty()) preferred = next;
+            directLaunch = TakeGameChangeDirect();
             SetFakePadScript({}); SetFakePad2Script({});
         }
     } catch (const std::exception& e) {

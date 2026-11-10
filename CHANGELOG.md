@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Installation and packaging
+
+- Ship per-platform release files: a Windows MSI, a macOS DMG, one x86_64 Flatpak for Linux and Steam Deck, the Quest APK and a portable Windows ZIP.
+- Ask where to store discs, saves and media on Windows instead of always using the C: drive, and reuse the recorded location on updates.
+- Apply the Steam Deck window preset from the Deck launcher so the same Flatpak behaves normally on desktop Linux.
+
 ## 0.9.1 - Cockpits, race results and platform fixes
 
 ### Cockpits and VR
@@ -29,6 +37,7 @@
 
 ### Import and installation
 
+- Play Silent's combined disc from a single installed image: the picker offers Arcade Mode and Simulation Mode, and each uses its own existing save slot. The PC, macOS, Steam Deck and Quest installers recognize the disc. ([#52](https://github.com/dubrovskiy-yevhen-stakelogic/gt-2-pc/issues/52), @lucianodato)
 - Automatically prepare missing GT4-import dependencies, handle long extraction paths, and install the converted catalogue directly on the selected PC or Quest destination.
 - Find 7-Zip through PATH when preparing HD media. ([#34](https://github.com/dubrovskiy-yevhen-stakelogic/gt-2-pc/pull/34), @g2h0)
 - Preserve installer validation output and stderr, and show the exit code and complete log path on failure.
