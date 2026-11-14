@@ -6,11 +6,11 @@
 namespace gt2::audio {
 struct AudioDevice::Buffer {
     SDL_AudioDeviceID device = 0;
+    Uint32 queueBytes = 0; // 40 ms in the obtained device format
     SDL_AudioStream* resample = nullptr; // mixer 44.1 kHz -> the device's own rate
 };
 namespace {
 constexpr size_t kFrames = 441;
-constexpr Uint32 kQueueBytes = Uint32(kFrames * 2 * sizeof(int16_t) * 4); // 40 ms
 }
 bool AudioDevice::Open(Mixer& mixer, std::string& error) {
     Close();
@@ -42,7 +42,8 @@ bool AudioDevice::Open(Mixer& mixer, std::string& error) {
         }
     }
     try {
-        buffers_.push_back(new Buffer{device, resample});
+        buffers_.push_back(new Buffer{device, Uint32((uint64_t(obtained.freq) * 40 + 999) / 1000 *
+            obtained.channels * (SDL_AUDIO_BITSIZE(obtained.format) / 8)), resample});
         mixer_ = &mixer;
         running_ = true;
         thread_ = std::thread([this] { Run(); });
@@ -65,7 +66,7 @@ void AudioDevice::Run() {
     std::vector<int16_t> samples(kFrames * 2);
     std::vector<uint8_t> converted;
     while (running_.load()) {
-        if (SDL_GetQueuedAudioSize(device) >= kQueueBytes) { SDL_Delay(2); continue; }
+        if (SDL_GetQueuedAudioSize(device) >= buffers_.front()->queueBytes) { SDL_Delay(2); continue; }
         std::fill(mix.begin(), mix.end(), 0.0f);
         mixer_->Mix(mix.data(), kFrames);
         for (size_t i = 0; i < mix.size(); ++i) samples[i] = int16_t(std::lround(std::clamp(mix[i], -1.0f, 1.0f) * 32767.0f));
@@ -79,10 +80,12 @@ void AudioDevice::Run() {
                 queued = -1;
             } else {
                 const int available = SDL_AudioStreamAvailable(resample);
-                if (available > 0) {
+                if (available < 0) queued = -1;
+                else if (available > 0) {
                     converted.resize(size_t(available));
                     const int got = SDL_AudioStreamGet(resample, converted.data(), available);
-                    if (got > 0 && SDL_QueueAudio(device, converted.data(), Uint32(got)) != 0) queued = -1;
+                    if (got < 0) queued = -1;
+                    else if (got > 0 && SDL_QueueAudio(device, converted.data(), Uint32(got)) != 0) queued = -1;
                 }
             }
         } else if (SDL_QueueAudio(device, samples.data(), Uint32(samples.size() * sizeof(int16_t))) != 0) {

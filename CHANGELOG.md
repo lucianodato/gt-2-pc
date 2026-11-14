@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep a 40 ms SDL audio queue at the output device's sample rate, including 96/192 kHz, and stop cleanly on resampler errors.
+
 - Latch Simulation damage when entering an event so changes to preferences cannot alter its replay. Save the native damage option with the replay, retaining GT event-table selection; changes apply when entering the next event.
 
 - Keep input HUD wheels, arrows and pedal frames on original nearest texels even when HD UI assets are available.

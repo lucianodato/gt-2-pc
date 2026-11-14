@@ -59,24 +59,26 @@ int main() {
             Require(input.Port1().buttons == 0, "script hold expiry");
         }
         SDL_QuitSubSystem(SDL_INIT_GAMECONTROLLER);
-        // The dummy driver reports no default rate: force 48 kHz so the 44.1 -> 48 kHz resampling path is covered.
-        SDL_setenv("GT2_AUDIO_DEVICE_RATE", "48000", 1);
-        gt2::audio::Mixer mixer;
-        AudioProbe probe;
-        mixer.SetStream(&probe);
-        gt2::audio::AudioDevice audio;
-        std::string error;
-        if (!audio.Open(mixer, error)) throw std::runtime_error(error);
-        const auto start = SDL_GetTicks64();
-        while (probe.frames < 4410 && SDL_GetTicks64() - start < 2000) SDL_Delay(5);
-        Require(probe.frames >= 4410, "audio device must keep feeding the mixer");
-        audio.Close();
-        const auto stopped = probe.frames.load();
-        SDL_Delay(30);
-        Require(probe.frames == stopped && !audio.IsOpen(), "audio close must join its worker");
-        if (!audio.Open(mixer, error)) throw std::runtime_error(error);
-        audio.Close();
-        mixer.SetStream(nullptr);
+        // Cover both direct playback and conversion to common device rates.
+        for (const char* rate : {"44100", "48000", "96000", "192000"}) {
+            SDL_setenv("GT2_AUDIO_DEVICE_RATE", rate, 1);
+            gt2::audio::Mixer mixer;
+            AudioProbe probe;
+            mixer.SetStream(&probe);
+            gt2::audio::AudioDevice audio;
+            std::string error;
+            if (!audio.Open(mixer, error)) throw std::runtime_error(error);
+            const auto start = SDL_GetTicks64();
+            while (probe.frames < 4410 && SDL_GetTicks64() - start < 2000) SDL_Delay(5);
+            Require(probe.frames >= 4410, "audio device must keep feeding the mixer");
+            audio.Close();
+            const auto stopped = probe.frames.load();
+            SDL_Delay(30);
+            Require(probe.frames == stopped && !audio.IsOpen(), "audio close must join its worker");
+            if (!audio.Open(mixer, error)) throw std::runtime_error(error);
+            audio.Close();
+            mixer.SetStream(nullptr);
+        }
         std::puts("SDL checks passed: gamepad axes/buttons, focus, disconnect, two scripted ports, audio streaming/reopen.");
         return 0;
     } catch (const std::exception& e) {
